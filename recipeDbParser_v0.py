@@ -138,8 +138,11 @@ def handle_multiple_urls(start, end, output_file, log_file):
     # Check if output file exists and load existing data
     if os.path.exists(output_file):
         with open(output_file, 'r') as file:
-            all_data = json.load(file)
-            if not isinstance(all_data, list):
+            try:
+                all_data = json.load(file)
+                if not isinstance(all_data, list):
+                    all_data = []
+            except json.JSONDecodeError:
                 all_data = []
     else:
         all_data = []
@@ -150,16 +153,18 @@ def handle_multiple_urls(start, end, output_file, log_file):
             log_url_status(url, True, log_file)
             data = process_url(url)
             all_data.append(data)
+            print(f"Processed URL: {url}")
         else:
             log_url_status(url, False, log_file)
+            print(f"Invalid URL: {url}")
 
     # Write the combined data to the output file
     with open(output_file, 'w') as file:
         json.dump(all_data, file, indent=2)
 
 # Example usage
-start_id = 2616
-end_id = 2619
+start_id = 2631
+end_id = 2635  # Adjust this range for testing
 output_file = 'output.json'
 log_file = 'url_log.csv'
 handle_multiple_urls(start_id, end_id, output_file, log_file)
