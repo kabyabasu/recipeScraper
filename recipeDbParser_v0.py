@@ -107,6 +107,35 @@ def parse_nutritional_data(data_list):
             nutritional_dict[f"{key} ({unit})"] = value
     return nutritional_dict
 
+# Function to parse the Cuisine Origin into nested structure
+def parse_cuisine_origin(cuisine_origin):
+    cuisine_origin = cuisine_origin.replace("Cuisine\n", "").strip()  # Clean up the input
+    parts = cuisine_origin.split(" >> ")
+    cuisine_dict = {
+        "continent": parts[0] if len(parts) > 0 else "",
+        "region": parts[1] if len(parts) > 1 else "",
+        "country": parts[2] if len(parts) > 2 else ""
+    }
+    if cuisine_dict["country"] == "Indian":
+        cuisine_dict["state"] = ""
+    return cuisine_dict
+
+# Function to parse the preparation time into a nested structure
+def parse_preparation_time(preparation_time):
+    preparation_time = preparation_time.replace("Preparation Time\n", "").strip()
+    cooking_time_match = re.search(r'Cooking Time - (\d+) minutes', preparation_time)
+    prep_time_match = re.search(r'Preparation Time - (\d+) minutes', preparation_time)
+    
+    cooking_time = int(cooking_time_match.group(1)) if cooking_time_match else 0
+    prep_time = int(prep_time_match.group(1)) if prep_time_match else 0
+    total_time = cooking_time + prep_time
+    
+    return {
+        "Cooking Time (Minutes)": cooking_time,
+        "Preparation Time (Minutes)": prep_time,
+        "Total Time (Minutes)": total_time
+    }
+
 # Main function to combine everything
 def process_url(url):
     # Extract table data
@@ -118,9 +147,9 @@ def process_url(url):
     # Parse the detailed nutritional data
     detailed_nutritional_profile = parse_nutritional_data(detailed_data["details"])
     title = detailed_data["title"]
-    cuisine_origin = detailed_data["Cuisine Origin"]
+    cuisine_origin = parse_cuisine_origin(detailed_data["Cuisine Origin"])
+    time_data = parse_preparation_time(detailed_data["Preparation Time"])
     dietary_details = detailed_data["Dietary Details"]
-    preparation_time = detailed_data["Preparation Time"]
     source_info = detailed_data["Source Info"]
     instructions = detailed_data["Instructions"]
 
@@ -129,7 +158,7 @@ def process_url(url):
         "title": title,
         "Cuisine Origin": cuisine_origin,
         "Dietary Details": dietary_details,
-        "Preparation Time": preparation_time,
+        "Time": time_data,
         "Source Info": source_info,
         "Estimated Nutritional Profile": nutritional_profile,
         "Ingredients": ingredients,
