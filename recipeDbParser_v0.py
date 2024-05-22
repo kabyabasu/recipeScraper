@@ -59,9 +59,16 @@ def click_show_more_button(url):
         # Grab the <h3> header text
         h3_header = driver.find_element(By.TAG_NAME, 'h3').text
 
-        # Grab the elements with the class 'title'
-        cuisine_origin_elements = driver.find_elements(By.CLASS_NAME, 'title')
-        cuisine_origin = [element.text for element in cuisine_origin_elements]
+        # Locate the <ul> element with the class 'collection'
+        collection_ul = driver.find_element(By.CLASS_NAME, 'collection')
+
+        # Extract the necessary information from the <li> elements
+        li_elements = collection_ul.find_elements(By.TAG_NAME, 'li')
+
+        cuisine_origin = li_elements[0].text.strip() if len(li_elements) > 0 else ""
+        dietary_details = driver.find_element(By.ID, 'dietary-text').text.strip() if len(li_elements) > 1 else ""
+        preparation_time = li_elements[2].text.strip() if len(li_elements) > 2 else ""
+        source_info = li_elements[3].find_element(By.TAG_NAME, 'a').get_attribute('href') if len(li_elements) > 3 else ""
 
         # Wait for the element with the ID 'steps' to be present
         try:
@@ -75,6 +82,9 @@ def click_show_more_button(url):
         return {
             "title": h3_header,
             "Cuisine Origin": cuisine_origin,
+            "Dietary Details": dietary_details,
+            "Preparation Time": preparation_time,
+            "Source Info": source_info,
             "details": big_rows_texts,
             "Instructions": instructions
         }
@@ -108,12 +118,18 @@ def process_url(url):
     detailed_nutritional_profile = parse_nutritional_data(detailed_data["details"])
     title = detailed_data["title"]
     cuisine_origin = detailed_data["Cuisine Origin"]
+    dietary_details = detailed_data["Dietary Details"]
+    preparation_time = detailed_data["Preparation Time"]
+    source_info = detailed_data["Source Info"]
     instructions = detailed_data["Instructions"]
 
     # Combine everything into the final JSON structure
     final_json = {
         "title": title,
         "Cuisine Origin": cuisine_origin,
+        "Dietary Details": dietary_details,
+        "Preparation Time": preparation_time,
+        "Source Info": source_info,
         "Estimated Nutritional Profile": nutritional_profile,
         "Ingredients": ingredients,
         "Estimated Nutritional Profile detailed": detailed_nutritional_profile,
@@ -164,7 +180,7 @@ def handle_multiple_urls(start, end, output_file, log_file):
 
 # Example usage
 start_id = 2631
-end_id = 2635  # Adjust this range for testing
+end_id = 2632  # Adjust this range for testing
 output_file = 'output.json'
 log_file = 'url_log.csv'
 handle_multiple_urls(start_id, end_id, output_file, log_file)
