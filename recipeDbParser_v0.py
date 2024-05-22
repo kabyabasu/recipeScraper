@@ -8,6 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Function to check if the URL is valid
 def is_valid_url(url):
@@ -147,7 +148,20 @@ def log_url_status(url, status, log_file):
             writer.writerow(["URL", "Exists"])
         writer.writerow([url, status])
 
-# Function to handle multiple URLs
+# Function to process a single URL (helper function for parallel execution)
+def process_single_url(i, log_file):
+    url = f'https://cosylab.iiitd.edu.in/recipedb/search_recipeInfo/{i}'
+    if is_valid_url(url):
+        log_url_status(url, True, log_file)
+        data = process_url(url)
+        print(f"Processed URL: {url}")
+        return data
+    else:
+        log_url_status(url, False, log_file)
+        print(f"Invalid URL: {url}")
+        return None
+
+# Function to handle multiple URLs in parallel
 def handle_multiple_urls(start, end, output_file, log_file):
     all_data = []
 
@@ -163,16 +177,14 @@ def handle_multiple_urls(start, end, output_file, log_file):
     else:
         all_data = []
 
-    for i in range(start, end + 1):
-        url = f'https://cosylab.iiitd.edu.in/recipedb/search_recipeInfo/{i}'
-        if is_valid_url(url):
-            log_url_status(url, True, log_file)
-            data = process_url(url)
-            all_data.append(data)
-            print(f"Processed URL: {url}")
-        else:
-            log_url_status(url, False, log_file)
-            print(f"Invalid URL: {url}")
+    # Create a thread pool to process URLs in parallel
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        futures = [executor.submit(process_single_url, i, log_file) for i in range(start, end + 1)]
+
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                all_data.append(result)
 
     # Write the combined data to the output file
     with open(output_file, 'w') as file:
@@ -180,7 +192,7 @@ def handle_multiple_urls(start, end, output_file, log_file):
 
 # Example usage
 start_id = 2631
-end_id = 2632  # Adjust this range for testing
+end_id = 2670  # Adjust this range for testing
 output_file = 'output.json'
 log_file = 'url_log.csv'
 handle_multiple_urls(start_id, end_id, output_file, log_file)
