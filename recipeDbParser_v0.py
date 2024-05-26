@@ -94,6 +94,116 @@ def click_show_more_button(url):
         # Close the WebDriver
         driver.quit()
 
+# Function to modify the nutritional profile
+def transform_nutritional_profile(nutritional_profile):
+    transformed_profile = {}
+    for key, value in nutritional_profile.items():
+        if key == "Calories":
+            transformed_profile[key] = int(value)
+        else:
+            new_key = key.replace("Fat", "Fat(g)").replace("Carbs", "Carbs(g)").replace("Protein", "Protein(g)")
+            transformed_profile[new_key] = int(value.replace('g', '').strip())
+    return transformed_profile
+
+# Function to extract servings and nutritional information from the source URL
+def extract_servings_from_source(source_url):
+    # Initialize the WebDriver (assuming Chrome)
+    driver = webdriver.Chrome()
+
+    try:
+        # Open the source URL
+        driver.get(source_url)
+
+        # Wait until the div with id 'mntl-recipe-details_1-0' is present
+        wait = WebDriverWait(driver, 10)
+        details_div = wait.until(EC.presence_of_element_located((By.ID, 'mntl-recipe-details_1-0')))
+
+        # Navigate to the required element
+        content_div = details_div.find_element(By.CLASS_NAME, 'mntl-recipe-details__content')
+        items = content_div.find_elements(By.CLASS_NAME, 'mntl-recipe-details__item')
+
+        data = {
+            "Time (from Source)": {
+                "Prep Time (Minutes)": 0,
+                "Cook Time (Minutes)": 0,
+                "Additional Time (Minutes)": 0,
+                "Total Time (Minutes)": 0
+            },
+            "Servings": 0,
+            "Yield": ""
+        }
+
+        def convert_to_minutes(time_str):
+            """Convert a time string into minutes."""
+            minutes = 0
+            time_parts = re.findall(r'(\d+)\s*(hr|min|hour|minute|hrs|hours|minutes)', time_str.lower())
+            for amount, unit in time_parts:
+                if 'hr' in unit or 'hour':
+                    minutes += int(amount) * 60
+                elif 'min' in unit or 'minute':
+                    minutes += int(amount)
+            return minutes
+        
+        def convert_to_numeric(servings_str):
+            """Convert servings string to a numeric value."""
+            match = re.search(r'\d+', servings_str)
+            if match:
+                return int(match.group())
+            return 0
+
+        for item_div in items:
+            try:
+                label_div = item_div.find_element(By.CLASS_NAME, 'mntl-recipe-details__label')
+                value_div = item_div.find_element(By.CLASS_NAME, 'mntl-recipe-details__value')
+                
+                # Use get_attribute('textContent') to capture the text
+                label_text = label_div.get_attribute('textContent').strip()
+                value_text = value_div.get_attribute('textContent').strip()
+
+                if label_text == "Prep Time:":
+                    data["Time (from Source)"]["Prep Time (Minutes)"] = convert_to_minutes(value_text)
+                elif label_text == "Cook Time:":
+                    data["Time (from Source)"]["Cook Time (Minutes)"] = convert_to_minutes(value_text)
+                elif label_text == "Additional Time:":
+                    data["Time (from Source)"]["Additional Time (Minutes)"] = convert_to_minutes(value_text)
+                elif label_text == "Total Time:":
+                    data["Time (from Source)"]["Total Time (Minutes)"] = convert_to_minutes(value_text)
+                elif label_text == "Servings:":
+                    data["Servings"] = convert_to_numeric(value_text)
+                elif label_text == "Yield:":
+                    data["Yield"] = value_text
+
+            except Exception as e:
+                print(f"Error processing item_div: {e}")
+
+        # Extract nutritional information
+        try:
+            nutrition_div = driver.find_element(By.ID, 'mntl-nutrition-facts-summary_1-0')
+            table_body = nutrition_div.find_element(By.CLASS_NAME, 'mntl-nutrition-facts-summary__table-body')
+            rows = table_body.find_elements(By.CLASS_NAME, 'mntl-nutrition-facts-summary__table-row')
+
+            nutritional_profile = {}
+            for row in rows:
+                cells = row.find_elements(By.TAG_NAME, 'td')
+                if len(cells) == 2:
+                    key = cells[0].get_attribute('textContent').strip()
+                    value = cells[1].get_attribute('textContent').strip()
+                    if key and value:
+                        nutritional_profile[value] = key  # Swap key and value
+
+            # Transform the nutritional profile
+            data["Nutritional Profile (from Source)"] = transform_nutritional_profile(nutritional_profile)
+
+        except Exception as e:
+            print(f"Error extracting nutritional information: {e}")
+            data["Nutritional Profile (from Source)"] = {}
+
+        return data
+
+    finally:
+        # Close the WebDriver
+        driver.quit()
+
 # Function to parse the detailed nutritional data
 def parse_nutritional_data(data_list):
     nutritional_dict = {}
@@ -153,6 +263,9 @@ def process_url(url):
     source_info = detailed_data["Source Info"]
     instructions = detailed_data["Instructions"]
 
+    # Extract servings and nutritional information from the source URL
+    servings_data = extract_servings_from_source(source_info)
+
     # Combine everything into the final JSON structure
     final_json = {
         "title": title,
@@ -160,6 +273,10 @@ def process_url(url):
         "Dietary Details": dietary_details,
         "Time": time_data,
         "Source Info": source_info,
+        "Servings": servings_data["Servings"],
+        "Yield": servings_data["Yield"],
+        "Time (from Source)": servings_data["Time (from Source)"],
+        "Nutritional Profile (from Source)": servings_data["Nutritional Profile (from Source)"],
         "Estimated Nutritional Profile": nutritional_profile,
         "Ingredients": ingredients,
         "Estimated Nutritional Profile detailed": detailed_nutritional_profile,
@@ -221,7 +338,7 @@ def handle_multiple_urls(start, end, output_file, log_file):
 
 # Example usage
 start_id = 2631
-end_id = 2670  # Adjust this range for testing
+end_id = 2632  # Adjust this range for testing
 output_file = 'output.json'
 log_file = 'url_log.csv'
 handle_multiple_urls(start_id, end_id, output_file, log_file)
