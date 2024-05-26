@@ -130,8 +130,6 @@ def convert_nutritional_profile(nutritional_profile):
     # Return the updated dictionary
     return converted_profile
 
-
-
 # Function to extract servings and nutritional information from the source URL
 def extract_servings_from_source(source_url):
     # Initialize the WebDriver (assuming Chrome)
@@ -231,7 +229,6 @@ def extract_servings_from_source(source_url):
 
             detailed_nutritional_profile = {}
 
-
             for row in rows:
                 td_elements = row.find_elements(By.TAG_NAME, 'td')
                 # Extract the text from the <span> element
@@ -246,6 +243,43 @@ def extract_servings_from_source(source_url):
             print(f"Error extracting nutritional information: {e}")
             data["Nutritional Profile (from Source)"] = {}
             data["Nutritional Profile Detailed (from Source)"] = {}
+
+        # Extract ingredient information
+        try:
+            ingredients_div = driver.find_element(By.CLASS_NAME, 'mntl-structured-ingredients__list')
+            ingredient_items = ingredients_div.find_elements(By.CLASS_NAME, 'mntl-structured-ingredients__list-item')
+
+            unicode_fractions = {
+                "\u00bd": "1/2",
+                "\u00bc": "1/4",
+                "\u00be": "3/4",
+                "\u2153": "1/3",
+                "\u2154": "2/3",
+                "\u215b": "1/8",
+                "\u215c": "3/8",
+                "\u215d": "5/8",
+                "\u215e": "7/8"
+            }
+
+            ingredients = []
+            for item in ingredient_items:
+                spans = item.find_elements(By.TAG_NAME, 'span')
+                quantity = spans[0].get_attribute('textContent').strip() if len(spans) > 0 else ""
+                unit = spans[1].get_attribute('textContent').strip() if len(spans) > 1 else ""
+                name = spans[2].get_attribute('textContent').strip() if len(spans) > 2 else ""
+
+                # Replace Unicode fractions with their textual representation
+                for unicode_char, fraction in unicode_fractions.items():
+                    quantity = quantity.replace(unicode_char, fraction)
+
+                ingredient = f"{quantity} {unit} {name}".strip()
+                ingredients.append(ingredient)
+
+            data["Ingredients (from source)"] = ingredients
+
+        except Exception as e:
+            print(f"Error extracting ingredients information: {e}")
+            data["Ingredients (from source)"] = []
 
         return data
 
@@ -329,6 +363,7 @@ def process_url(url):
         "Nutritional Profile Detailed (from Source)": servings_data["Nutritional Profile Detailed (from Source)"],
         "Estimated Nutritional Profile": nutritional_profile,
         "Ingredients": ingredients,
+        "Ingredients (from source)": servings_data["Ingredients (from source)"],
         "Estimated Nutritional Profile detailed": detailed_nutritional_profile,
         "Instructions": instructions
     }
