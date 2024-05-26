@@ -99,11 +99,38 @@ def transform_nutritional_profile(nutritional_profile):
     transformed_profile = {}
     for key, value in nutritional_profile.items():
         if key == "Calories":
-            transformed_profile[key] = int(value)
+            transformed_profile[key] = int(value.replace('g', '').strip())
         else:
             new_key = key.replace("Fat", "Fat(g)").replace("Carbs", "Carbs(g)").replace("Protein", "Protein(g)")
             transformed_profile[new_key] = int(value.replace('g', '').strip())
     return transformed_profile
+
+def convert_nutritional_profile(nutritional_profile):
+    # Initialize an empty dictionary for the converted profile
+    converted_profile = {}
+    
+    # Loop through each key-value pair in the nutritional profile
+    for key, value in nutritional_profile.items():
+        # Split the value to remove the "key\n" part and get the actual value
+        key_base, actual_value = value.split('\n')
+        
+        # Separate the numeric part from the unit
+        numeric_value = ''.join([char for char in actual_value if char.isdigit() or char == '.'])
+        unit = ''.join([char for char in actual_value if not char.isdigit() and char != '.'])
+        
+        # Create the new key by appending the unit in parentheses to the original key
+        new_key = "{}({})".format(key_base, unit)
+        
+        # Convert the numeric value to a float
+        numeric_value = float(numeric_value)
+        
+        # Add the new key-value pair to the converted profile
+        converted_profile[new_key] = numeric_value
+    
+    # Return the updated dictionary
+    return converted_profile
+
+
 
 # Function to extract servings and nutritional information from the source URL
 def extract_servings_from_source(source_url):
@@ -138,9 +165,9 @@ def extract_servings_from_source(source_url):
             minutes = 0
             time_parts = re.findall(r'(\d+)\s*(hr|min|hour|minute|hrs|hours|minutes)', time_str.lower())
             for amount, unit in time_parts:
-                if 'hr' in unit or 'hour':
+                if 'hr' in unit or 'hour' in unit:
                     minutes += int(amount) * 60
-                elif 'min' in unit or 'minute':
+                elif 'min' in unit or 'minute' in unit:
                     minutes += int(amount)
             return minutes
         
@@ -194,9 +221,31 @@ def extract_servings_from_source(source_url):
             # Transform the nutritional profile
             data["Nutritional Profile (from Source)"] = transform_nutritional_profile(nutritional_profile)
 
+            # Extract detailed nutritional information
+            detailed_nutrition_div = driver.find_element(By.ID, 'mntl-nutrition-facts-label_1-0')
+            wrapper_div = detailed_nutrition_div.find_element(By.CLASS_NAME, 'mntl-nutrition-facts-label__wrapper')
+            contents_div = wrapper_div.find_element(By.CLASS_NAME, 'mntl-nutrition-facts-label__contents')
+            table = contents_div.find_element(By.CLASS_NAME, 'mntl-nutrition-facts-label__table')
+            tbody = table.find_element(By.CLASS_NAME, 'mntl-nutrition-facts-label__table-body')
+            rows = tbody.find_elements(By.TAG_NAME, 'tr')
+
+            detailed_nutritional_profile = {}
+
+
+            for row in rows:
+                td_elements = row.find_elements(By.TAG_NAME, 'td')
+                # Extract the text from the <span> element
+                if len(td_elements) == 2:
+                    span_element = td_elements[0].find_element(By.CLASS_NAME, 'mntl-nutrition-facts-label__nutrient-name')
+                    key = span_element.get_attribute('textContent').strip()
+                    detailed_nutritional_profile[key] = td_elements[0].get_attribute('textContent').strip()
+
+            data["Nutritional Profile Detailed (from Source)"] = convert_nutritional_profile(detailed_nutritional_profile)
+
         except Exception as e:
             print(f"Error extracting nutritional information: {e}")
             data["Nutritional Profile (from Source)"] = {}
+            data["Nutritional Profile Detailed (from Source)"] = {}
 
         return data
 
@@ -277,6 +326,7 @@ def process_url(url):
         "Yield": servings_data["Yield"],
         "Time (from Source)": servings_data["Time (from Source)"],
         "Nutritional Profile (from Source)": servings_data["Nutritional Profile (from Source)"],
+        "Nutritional Profile Detailed (from Source)": servings_data["Nutritional Profile Detailed (from Source)"],
         "Estimated Nutritional Profile": nutritional_profile,
         "Ingredients": ingredients,
         "Estimated Nutritional Profile detailed": detailed_nutritional_profile,
