@@ -131,7 +131,26 @@ def convert_nutritional_profile(nutritional_profile):
     return converted_profile
 
 # Function to extract servings and nutritional information from the source URL
-def extract_servings_from_source(source_url):
+def extract_servings_from_source(source_url, source_log_file):
+    # Validate the URL before proceeding
+    if not is_valid_url(source_url):
+        log_url_status(source_url, False, source_log_file)
+        print(f"Invalid URL: {source_url}")
+        return {
+            "Time (from Source)": {
+                "Prep Time (Minutes)": 0,
+                "Cook Time (Minutes)": 0,
+                "Additional Time (Minutes)": 0,
+                "Total Time (Minutes)": 0
+            },
+            "Servings": 0,
+            "Yield": "",
+            "About Recipe": "",
+            "Nutritional Profile (from Source)": {},
+            "Nutritional Profile Detailed (from Source)": {},
+            "Ingredients (from source)": []
+        }
+
     # Initialize the WebDriver (assuming Chrome)
     driver = webdriver.Chrome()
 
@@ -155,7 +174,8 @@ def extract_servings_from_source(source_url):
                 "Total Time (Minutes)": 0
             },
             "Servings": 0,
-            "Yield": ""
+            "Yield": "",
+            "About Recipe": ""
         }
 
         def convert_to_minutes(time_str):
@@ -281,6 +301,15 @@ def extract_servings_from_source(source_url):
             print(f"Error extracting ingredients information: {e}")
             data["Ingredients (from source)"] = []
 
+        # Extract the text inside <p> element with class "article-subheading type--dog"
+        try:
+            about_recipe_element = driver.find_element(By.CLASS_NAME, 'article-subheading.type--dog')
+            data["About Recipe"] = about_recipe_element.text.strip()
+        except Exception as e:
+            print(f"Error extracting about recipe information: {e}")
+            data["About Recipe"] = ""
+
+        log_url_status(source_url, True, source_log_file)
         return data
 
     finally:
@@ -330,7 +359,7 @@ def parse_preparation_time(preparation_time):
     }
 
 # Main function to combine everything
-def process_url(url):
+def process_url(url, source_log_file):
     # Extract table data
     nutritional_profile, ingredients = extract_tables(url)
 
@@ -347,7 +376,7 @@ def process_url(url):
     instructions = detailed_data["Instructions"]
 
     # Extract servings and nutritional information from the source URL
-    servings_data = extract_servings_from_source(source_info)
+    servings_data = extract_servings_from_source(source_info, source_log_file)
 
     # Combine everything into the final JSON structure
     final_json = {
@@ -365,7 +394,8 @@ def process_url(url):
         "Ingredients": ingredients,
         "Ingredients (from source)": servings_data["Ingredients (from source)"],
         "Estimated Nutritional Profile detailed": detailed_nutritional_profile,
-        "Instructions": instructions
+        "Instructions": instructions,
+        "About Recipe": servings_data["About Recipe"]
     }
 
     return final_json
@@ -380,11 +410,11 @@ def log_url_status(url, status, log_file):
         writer.writerow([url, status])
 
 # Function to process a single URL (helper function for parallel execution)
-def process_single_url(i, log_file):
+def process_single_url(i, log_file, source_log_file):
     url = f'https://cosylab.iiitd.edu.in/recipedb/search_recipeInfo/{i}'
     if is_valid_url(url):
         log_url_status(url, True, log_file)
-        data = process_url(url)
+        data = process_url(url, source_log_file)
         print(f"Processed URL: {url}")
         return data
     else:
@@ -393,7 +423,7 @@ def process_single_url(i, log_file):
         return None
 
 # Function to handle multiple URLs in parallel
-def handle_multiple_urls(start, end, output_file, log_file):
+def handle_multiple_urls(start, end, output_file, log_file, source_log_file):
     all_data = []
 
     # Check if output file exists and load existing data
@@ -410,7 +440,7 @@ def handle_multiple_urls(start, end, output_file, log_file):
 
     # Create a thread pool to process URLs in parallel
     with ThreadPoolExecutor(max_workers=40) as executor:
-        futures = [executor.submit(process_single_url, i, log_file) for i in range(start, end + 1)]
+        futures = [executor.submit(process_single_url, i, log_file, source_log_file) for i in range(start, end + 1)]
 
         for future in as_completed(futures):
             result = future.result()
@@ -422,8 +452,9 @@ def handle_multiple_urls(start, end, output_file, log_file):
         json.dump(all_data, file, indent=2)
 
 # Example usage
-start_id = 2631
-end_id = 2632  # Adjust this range for testing
+start_id = 4003
+end_id = 4023  # Adjust this range for testing
 output_file = 'output.json'
 log_file = 'url_log.csv'
-handle_multiple_urls(start_id, end_id, output_file, log_file)
+source_log_file = 'source_log.csv'
+handle_multiple_urls(start_id, end_id, output_file, log_file, source_log_file)
