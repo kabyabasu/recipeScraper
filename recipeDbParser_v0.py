@@ -423,38 +423,35 @@ def process_single_url(i, log_file, source_log_file):
         return None
 
 # Function to handle multiple URLs in parallel
-def handle_multiple_urls(start, end, output_file, log_file, source_log_file):
+def handle_multiple_urls(start, end, output_file_prefix, log_file, source_log_file):
     all_data = []
-
-    # Check if output file exists and load existing data
-    if os.path.exists(output_file):
-        with open(output_file, 'r') as file:
-            try:
-                all_data = json.load(file)
-                if not isinstance(all_data, list):
-                    all_data = []
-            except json.JSONDecodeError:
-                all_data = []
-    else:
-        all_data = []
+    batch_number = 1
 
     # Create a thread pool to process URLs in parallel
     with ThreadPoolExecutor(max_workers=40) as executor:
-        futures = [executor.submit(process_single_url, i, log_file, source_log_file) for i in range(start, end + 1)]
+        for i in range(start, end + 1, 10000):
+            batch_start = i
+            batch_end = min(i + 9999, end)
+            futures = [executor.submit(process_single_url, j, log_file, source_log_file) for j in range(batch_start, batch_end + 1)]
 
-        for future in as_completed(futures):
-            result = future.result()
-            if result:
-                all_data.append(result)
-
-    # Write the combined data to the output file
-    with open(output_file, 'w') as file:
-        json.dump(all_data, file, indent=2)
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    all_data.append(result)
+            
+            # Save batch to file
+            batch_output_file = f"{output_file_prefix}_{batch_number}.json"
+            with open(batch_output_file, 'w') as file:
+                json.dump(all_data, file, indent=2)
+            
+            print(f"Saved batch {batch_number} to {batch_output_file}")
+            batch_number += 1
+            all_data = []  # Clear the list for the next batch
 
 # Example usage
-start_id = 2000
+start_id = 5000
 end_id = 200000  # Adjust this range for testing
-output_file = 'output.json'
+output_file_prefix = 'output'
 log_file = 'url_log.csv'
 source_log_file = 'source_log.csv'
-handle_multiple_urls(start_id, end_id, output_file, log_file, source_log_file)
+handle_multiple_urls(start_id, end_id, output_file_prefix, log_file, source_log_file)
